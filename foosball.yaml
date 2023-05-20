@@ -1,0 +1,265 @@
+esphome:
+  name: foosball
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+
+api:
+  encryption:
+    key: "fo/s6dzXayaAPKRbbeHCpeteeN2v8vMZFlJTSV3UbxI="
+
+ota:
+  password: "b5cfd7eb4596aa48e0ca1eaea53bbc9e"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+http_request:
+  id: http_request_data
+  useragent: esphome/device
+  timeout: 2s
+
+globals:
+   - id: blue_goals
+     type: int
+     initial_value: '0'
+   - id: red_goals
+     type: int
+     initial_value: '0'
+   - id: has_win
+     type: bool
+     initial_value: 'false'
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: 15
+      inverted: true
+    id: blue_ir_beam_break
+    filters:
+      - delayed_off: 4000ms
+    on_press:
+      # Blue goal
+      then:
+        - light.turn_on:
+            id: blue_goal_light
+            brightness: 100%
+            blue: 100%
+            red: 0%
+            green: 0%
+            effect: none
+        - http_request.post:
+            url: http://192.168.1.154/goal?team=blue
+            on_response:
+              then:
+                - lambda: |-
+                    json::parse_json(id(http_request_data).get_string(), [](JsonObject root) {
+                        id(blue_goals) = root["blue"];
+                        id(red_goals) = root["red"];
+                    });
+        - logger.log: 
+            format: "Blue goal %d !!!"
+            args: [id(blue_goals)]
+        - if:
+            condition:
+              lambda: 'return id(blue_goals) >= 10 && !id(has_win);'
+            then:
+              - logger.log: "Blue wins!"
+              - globals.set:
+                  id: has_win
+                  value: 'true'
+              - light.turn_on:
+                  id: red_goal_light
+                  brightness: 100%
+                  blue: 100%
+                  red: 0%
+                  green: 0%    
+                  effect: "Fast Pulse"
+              - light.turn_on:
+                  id: blue_goal_light
+                  brightness: 100%
+                  blue: 100%
+                  red: 0%
+                  green: 0%    
+                  effect: "Fast Pulse"
+              - http_request.post: http://192.168.1.154/win?team=blue
+              - media_player.play_media: !lambda |-
+                  char buffer[128];
+                  sprintf(buffer, "http://homeassistant.local:8123/local/media/win_blue_%d.wav", (rand() % 2) + 1);
+                  return {buffer};
+              - delay: 15s
+              - light.turn_off: red_goal_light
+              - light.turn_off: blue_goal_light
+              - globals.set:
+                  id: has_win
+                  value: 'false'
+              - http_request.post: http://192.168.1.154/reset
+            else:
+              - media_player.play_media: !lambda |-
+                  char buffer[128];
+                  sprintf(buffer, "http://homeassistant.local:8123/local/media/goal_blue_%d.wav", (rand() % 6) + 1);
+                  return {buffer};
+    on_release:
+      then:
+        - if:
+            condition:
+              lambda: 'return !id(has_win);'
+            then:
+              - light.turn_off: blue_goal_light
+
+  - platform: gpio
+    pin:
+      number: 12
+      inverted: true
+    id: red_ir_beam_break
+    filters:
+      - delayed_off: 4000ms
+    on_press:
+      # Red goal
+      then:
+        - light.turn_on:
+            id: red_goal_light
+            brightness: 100%
+            blue: 0%
+            red: 100%
+            green: 0%    
+            effect: none        
+        - http_request.post:
+            url: http://192.168.1.154/goal?team=red
+            on_response:
+              then:
+                - lambda: |-
+                    json::parse_json(id(http_request_data).get_string(), [](JsonObject root) {
+                        id(blue_goals) = root["blue"];
+                        id(red_goals) = root["red"];
+                    });
+        - logger.log: 
+            format: "Red goal %d !!!"
+            args: [id(red_goals)]
+        - if:
+            condition:
+              lambda: 'return id(red_goals) >= 10 && !id(has_win);'
+            then:
+              - logger.log: "Red wins!"
+              - globals.set:
+                  id: has_win
+                  value: 'true'
+              - light.turn_on:
+                  id: red_goal_light
+                  brightness: 100%
+                  blue: 0%
+                  red: 100%
+                  green: 0%    
+                  effect: "Fast Pulse"
+              - light.turn_on:
+                  id: blue_goal_light
+                  brightness: 100%
+                  blue: 0%
+                  red: 100%
+                  green: 0%    
+                  effect: "Fast Pulse"
+              - http_request.post: http://192.168.1.154/win?team=red
+              - media_player.play_media: !lambda |-
+                  char buffer[128];
+                  sprintf(buffer, "http://homeassistant.local:8123/local/media/win_red_%d.wav", (rand() % 2) + 1);
+                  return {buffer};
+              - delay: 15s
+              - light.turn_off: red_goal_light
+              - light.turn_off: blue_goal_light
+              - globals.set:
+                  id: has_win
+                  value: 'false'
+              - http_request.post: http://192.168.1.154/reset
+            else:
+              - media_player.play_media: !lambda |-
+                  char buffer[128];
+                  sprintf(buffer, "http://homeassistant.local:8123/local/media/goal_red_%d.wav", (rand() % 6) + 1);
+                  return {buffer};
+    on_release:
+      then:
+        - if:
+            condition:
+              lambda: 'return !id(has_win);'
+            then:
+              - light.turn_off: red_goal_light
+
+output:
+  - platform: ledc
+    id: blue_out_comp1
+    pin:
+      number: 21
+    channel: 0
+    frequency: "1000Hz"
+  - platform: ledc
+    id: blue_out_comp2
+    pin:
+      number: 19
+    channel: 2
+    frequency: "1000Hz"
+  - platform: ledc
+    id: blue_out_comp3
+    pin:
+      number: 18
+    channel: 4
+    frequency: "1000Hz"
+
+  - platform: ledc
+    id: red_out_comp1
+    pin:
+      number: 4
+    channel: 5
+    frequency: "1000Hz"
+  - platform: ledc
+    id: red_out_comp2
+    pin:
+      number: 22
+    channel: 6
+    frequency: "1000Hz"
+  - platform: ledc
+    id: red_out_comp3
+    pin:
+      number: 23
+    channel: 7
+    frequency: "1000Hz"
+
+light:
+  - platform: rgb
+    name: "Blue Goal"
+    id: blue_goal_light
+    red: blue_out_comp1
+    green: blue_out_comp2
+    blue: blue_out_comp3
+    effects:
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 0.2s
+          update_interval: 0.2s
+
+  - platform: rgb
+    name: "Red Goal"
+    id: red_goal_light
+    red: red_out_comp1
+    green: red_out_comp2
+    blue: red_out_comp3
+    effects:
+      - pulse:
+          name: "Fast Pulse"
+          transition_length: 0.2s
+          update_interval: 0.2s
+
+media_player:
+  - platform: i2s_audio
+    name: ESPHome I2S Media Player
+    id: speaker
+    dac_type: external
+    i2s_dout_pin: 25
+    mode: stereo
+
+i2s_audio:
+  i2s_lrclk_pin: 27
+  i2s_bclk_pin: 26
