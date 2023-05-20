@@ -2,6 +2,7 @@
 
 Add ligths, voices and a scoreboard to your foosball table.
 
+![video](./docs/Video.mov)
 
 ## How it works
 
@@ -41,6 +42,7 @@ I've used [blender](https://www.blender.org) to create the 3D models and a Creal
 * [foosball_light_support.blend](./foosball_light_support.blend) The LED strip support.
 
 ## Pics
-
+![video](./docs/Video-2.mov)
 ![electronics](./docs/image1.jpeg)
 ![mounted](./docs/image2.jpeg)
+![case](./docs/case.png)
